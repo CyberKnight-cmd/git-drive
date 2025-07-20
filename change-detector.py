@@ -2,10 +2,20 @@ import os
 import json
 import time
 
+from google.auth.transport.requests import Request
+from google.oauth2.credentials import Credentials
+from google_auth_oauthlib.flow import InstalledAppFlow
+from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
+from googleapiclient.http import MediaFileUpload
+
 # The file you want to keep track of (will be edited later as a list.)
 DIRECTORY_TO_TRACK = "tracked_folder"
-
+CREDENTIALS_FILE = "credentials.json"
 STATE_FILE = "state.json"
+TOKEN_FILE = "token.json"
+SCOPES = ['https://www.googleapis.com/auth/drive']
+
 
 def scan_directory(directory):
     """
@@ -82,6 +92,62 @@ def compare_states(previous_state, current_state):
             modified_files.add(file_path)
     
     return added_files, modified_files, deleted_files
+
+
+def authenticate_google_drive():
+    """
+    Handles user authentication for Google Drive API.
+    This will open a browser window for you to log in the first time.
+    """
+
+    creds = None
+    # This file token.json stores your access tokens and is created automatically when the authorization flow completes for the first time
+    if os.path.exists(TOKEN_FILE):
+        creds = Credentials.from_authorized_user_file(TOKEN_FILE, SCOPES)
+
+    # If there are no (valid) credentials available, let the user log in.
+    if not creds or not creds.valid:
+        if creds and creds.expired and creds.refresh_token:
+            creds.refresh(Request)
+        else:
+            flow = InstalledAppFlow.from_client_secrets_file(CREDENTIALS_FILE, SCOPES)
+            creds = flow.run_local_server(port = 0)
+        # Save the credentials for the next run
+        with open(TOKEN_FILE, 'w') as token:
+            token.write(creds.to_json())
+    return creds
+
+def upload_new_file(service, file_path):
+    """
+    Uploads a single file to the root of Google Drive
+    """
+    # Get just the filename from the full path
+    file_name = os.path.basename(file_path)
+    print(f" [ACTION] Uploading {file_name} to Google Drive...")
+
+
+    try:
+        # Define the metadata for the file (e.g. its name)
+        file_metadata = {'name': file_name}
+
+        # Define the media to upload by pointing to the local file path
+        media = MediaFileUpload(file_path, resumable=True)
+
+
+        # Make the API call to create the file on Google Drive
+        file = service.files().create(body=file_metadata,
+                                       media_body=media,
+                                         fields = 'id' # We ask for the ID back after upload
+                                         ).execute()
+        
+        print(f"Upload Successful! File ID : {file.get('id')}")
+        return file.get('id')
+    
+    except HttpError as error:
+        print(f"An error occured during upload : {error}")
+        return None
+
+    
 
 
 def main():
