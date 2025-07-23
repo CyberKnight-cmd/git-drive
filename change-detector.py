@@ -11,6 +11,7 @@ from googleapiclient.http import MediaFileUpload
 
 # The file you want to keep track of (will be edited later as a list.)
 DIRECTORY_TO_TRACK = "tracked_folder"
+DRIVE_ROOT_FOLDER_NAME = "Git-Drive-Backup"
 CREDENTIALS_FILE = "credentials.json"
 STATE_FILE = "state.json"
 TOKEN_FILE = "token.json"
@@ -165,29 +166,38 @@ def main():
 
     if not added and not modified and not deleted: 
         print("No changes detected. Everything is up to date.")
+        return
     
-    else:
-        print("\n----- Change report -----")
-        if added:
-            print(f"\n[Added] {len(added)} new file(s):")
-            for f in added:
-                print(f" - {f}")
-    
-        if modified:
-            print(f"\n[Modified] {len(modified)} new file(s) have been changed :")
-            for f in modified:
-                print(f" - {f}")
-        
-        if deleted:
-            print(f"\n[Deleted] {len(deleted)} previous file(s) have been removed : ")
-        for f in deleted:
-                print(f" - {f}")
+    print("---Connecting to Google Drive---")
+    creds = authenticate_google_drive()
+    drive_service = build('drive', 'v3', credentials=creds)
+    print("Authentication succesful.")
 
-    # 5. Save the current state for the next time
-    print("\n--- Saving Current State ---")
+    
+
+    print("\n----- Change report -----")
+    # --- Part 3: Handle Added Files ---
+    if added:
+        print(f"\n--- Processing {len(added)} New File(s) ---")
+        for relative_path in added:
+            # Construct the full local path to the file
+            full_path = os.path.join(DIRECTORY_TO_TRACK, relative_path)
+            upload_new_file(drive_service, full_path)
+    
+    # For now, we just print the other changes
+    if modified:
+        print(f"\n--- Found {len(modified)} Modified File(s) (action not implemented yet) ---")
+        for f in modified: print(f"  ~ {f}")
+    if deleted:
+        print(f"\n--- Found {len(deleted)} Deleted File(s) (action not implemented yet) ---")
+        for f in deleted: print(f"  - {f}")
+
+    # --- Part 4: Save State (Same as before) ---
+    print("\n--- Saving current state... ---")
     save_current_state(current_state)
-
     print("Done.")
 
 if __name__ == "__main__":
     main()
+
+
